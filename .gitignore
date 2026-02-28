@@ -1,0 +1,17 @@
+# Environment Variables
+backend/.env
+
+# Go Binaries
+backend/axios-backend.exe
+backend/*.exe
+
+# Node
+frontend/node_modules/
+
+# Mac OS
+.DS_Store
+
+# Temporary Files
+*.log
+backend/test_ai.ps1
+test_ai.ps1
