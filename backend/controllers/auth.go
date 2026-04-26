@@ -18,7 +18,8 @@ type RegisterInput struct {
 	CollegeID        string   `json:"college_id" binding:"required"`
 	Wings            []string `json:"wings"`
 	CodeforcesHandle string   `json:"codeforces_handle" binding:"required"` // Mandatory
-	GithubHandle     string   `json:"github_handle" binding:"required"`     // Mandatory
+	CodechefHandle   string   `json:"codechef_handle"`
+	GithubHandle     string   `json:"github_handle" binding:"required"` // Mandatory
 	KaggleHandle     string   `json:"kaggle_handle"`
 	CTFHandle        string   `json:"ctf_handle"`
 }
@@ -48,6 +49,7 @@ func Register(c *gin.Context) {
 		CollegeID:        input.CollegeID,
 		Wings:            input.Wings,
 		CodeforcesHandle: input.CodeforcesHandle,
+		CodechefHandle:   input.CodechefHandle,
 		GithubHandle:     input.GithubHandle,
 		KaggleHandle:     input.KaggleHandle,
 		CTFHandle:        input.CTFHandle,

@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.47.0
 	google.golang.org/api v0.259.0
 	google.golang.org/genai v1.41.0

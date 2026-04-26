@@ -2,12 +2,24 @@ package utils
 
 import (
 	"errors"
+	"log"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtKey = []byte("my_secret_key") // TODO: use env variable
+// jwtKey is loaded from the JWT_SECRET environment variable.
+// godotenv.Load() is called in database.Connect() at startup, so the env is
+// populated before any token operations occur.
+func getJWTKey() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Println("WARNING: JWT_SECRET is not set. Using an insecure default — set this in .env for production!")
+		secret = "insecure-default-change-me"
+	}
+	return []byte(secret)
+}
 
 type Claims struct {
 	UserID uint `json:"user_id"`
@@ -24,13 +36,13 @@ func GenerateToken(userID uint) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtKey)
+	return token.SignedString(getJWTKey())
 }
 
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return getJWTKey(), nil
 	})
 
 	if err != nil {
