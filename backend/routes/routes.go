@@ -33,6 +33,24 @@ func SetupRoutes(r *gin.Engine) {
             ai.GET("/analysis", controllers.GetProfileAnalysis)
 		}
 
+		// Wing-Specific Routes
+		wings := api.Group("/wings")
+		wings.Use(middleware.AuthMiddleware())
+		{
+			// CP Wing
+			wings.GET("/cp/upsolves", controllers.GetUpsolveQueue)
+			wings.POST("/cp/upsolves/:id/status", controllers.UpdateUpsolveStatus)
+			wings.POST("/cp/mock", controllers.GenerateMockContest)
+
+			// Dev Wing
+			wings.GET("/dev/first-issues", controllers.GetGoodFirstIssues)
+			wings.GET("/dev/health", controllers.GetDevHealth)
+			wings.POST("/dev/review", controllers.ReviewPullRequest)
+
+			// ML Wing
+			wings.GET("/ml/curate", controllers.GetMLCuration)
+		}
+
 		public := api.Group("/public")
 		{
 			public.GET("/leaderboard", controllers.GetOverallLeaderboard)

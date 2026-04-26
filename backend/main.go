@@ -3,12 +3,14 @@ package main
 import (
 	"axios-backend/database"
 	"axios-backend/routes"
+	"axios-backend/workers"
 	"github.com/gin-gonic/gin"
 	"os"
 )
 
 func main() {
 	database.Connect()
+	workers.StartCronJobs()
 
 	r := gin.Default()
 	

@@ -189,4 +189,56 @@ func ChatWithCoachHF(token string, systemContext string, userQuery string) (stri
 	return chatResp.Choices[0].Message.Content, nil
 }
 
+// SubAgentCall is the generic HF inference function used by the Orchestrator
+// to dispatch individual atomic sub-tasks. Unlike ChatWithCoachHF, it does NOT
+// carry a full user profile context dump — it only receives the focused sub-task.
+//
+// systemPrompt: domain-specific persona + hard constraints (e.g. "no full solutions")
+// taskDescription: the atomic task string from OrchestratorPlan.SubTasks[i].Description
+func SubAgentCall(token string, systemPrompt string, taskDescription string) (string, error) {
+	reqBody := ChatRequest{
+		Model: HF_MODEL,
+		Messages: []ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: taskDescription},
+		},
+		MaxTokens:   512, // Sub-tasks are atomic — keep responses tight
+		Temperature: 0.4, // Lower temp for more deterministic, focused output
+		Stream:      false,
+	}
 
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("sub-agent: failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", HF_API_URL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("sub-agent: failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("sub-agent: HF API call failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("sub-agent: HF API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return "", fmt.Errorf("sub-agent: failed to decode HF response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("sub-agent: HF returned empty choices")
+	}
+
+	return chatResp.Choices[0].Message.Content, nil
+}
