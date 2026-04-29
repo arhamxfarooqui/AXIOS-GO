@@ -1,10 +1,10 @@
-# AXIOS-GO: The Centralized Technical Nexus 🌐
+# AXIOS-GO: The Centralized Technical Nexus 
 
 AXIOS-GO is a production-grade, AI-driven platform designed to centralize technical growth. It bridges the gap between competitive programming, software engineering, and AI research through a **Decoupled Agentic Architecture**.
 
 ---
 
-## 🛠️ The Tech Stack
+##  The Tech Stack
 
 ```mermaid
 graph TD
@@ -41,7 +41,7 @@ graph TD
     Go --> Groq
 ```
 
-## 🏛️ System Design & Architecture
+## System Design & Architecture
 
 AXIOS-GO is built on the principle of **Agentic Orchestration**. It doesn't just process requests; it reasons, plans, and remembers.
 
@@ -81,7 +81,7 @@ graph TD
 
 ---
 
-## 🏎️ CP Wing (Competitive Programming)
+## CP Wing (Competitive Programming)
 
 The CP Wing is designed to turn failures into growth. It automates the "Upsolving" process.
 
@@ -108,7 +108,7 @@ To prevent cheating and encourage true learning, the **CodeSensei** sub-agent pr
 
 ---
 
-## 🏗️ Dev Wing (Software Engineering)
+##  Dev Wing (Software Engineering)
 
 The Dev Wing focuses on repository health and professional representation.
 
@@ -126,7 +126,7 @@ Using the **STAR (Situation, Task, Action, Result)** method, AXIOS-GO analyzes r
 
 ---
 
-## 🧠 AI Intelligence Layer: The Orchestrator
+##  AI Intelligence Layer: The Orchestrator
 
 AXIOS-GO utilizes a multi-model routing strategy to optimize for reasoning depth and response speed.
 
@@ -169,7 +169,7 @@ $$AxiosRating = (CF_{Rating} \times 0.5) + (CF_{Solved} \times 5) + (GH_{Repos} 
 
 ---
 
-## 📂 Repository blueprint
+##  Repository blueprint
 
 ### Backend (`/backend`)
 - **`/controllers`**: HTTP entry points for Auth, AI, CP, Dev, and ML wings.
@@ -185,7 +185,7 @@ $$AxiosRating = (CF_{Rating} \times 0.5) + (CF_{Solved} \times 5) + (GH_{Repos} 
 
 ---
 
-## 🛠️ Infrastructure Stack
+## Infrastructure Stack
 
 - **Primary DB**: PostgreSQL (Relational data persistence).
 - **Messaging**: RabbitMQ (Task queue for background sync).
@@ -194,7 +194,7 @@ $$AxiosRating = (CF_{Rating} \times 0.5) + (CF_{Solved} \times 5) + (GH_{Repos} 
 
 ---
 
-## 🚀 Use Cases & User Journeys
+## Use Cases & User Journeys
 
 ### 1. The "Silent Mentor" Journey
 A user fails a problem on Codeforces. Within 4 hours, the problem appears in their **Upsolve Queue**. They click "Get Nudge", and the AI (aware of their weakness in Segment Trees) provides a hint about the specific logic error without giving the code. The user solves it, and their **Shadow Memory** score for "Segment Trees" increases.
@@ -204,10 +204,8 @@ A user requests a roadmap for "Frontend + ML". The **Orchestrator** generates a 
 
 ---
 
-## 🎨 Design Philosophy
+## Design Philosophy
 - **Aesthetics**: Dark-mode glassmorphism with neon accents (#A855F7, #22D3EE).
 - **Motion**: Framer Motion for seamless transitions.
 - **Persona**: The AI behaves as an elite technical mentor—concise, encouraging, and logic-focused.
-
 ---
-© 2025 AXIOS Technical Nexus. PHASE 1 ONLINE.
