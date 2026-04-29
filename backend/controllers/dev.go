@@ -2,8 +2,8 @@ package controllers
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"axios-backend/database"
@@ -40,8 +40,9 @@ func GetDevHealth(c *gin.Context) {
 		return
 	}
 
+	// Task 3: Verify GitHub Handle
 	if user.GithubHandle == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "GitHub handle not linked"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "GitHub handle not linked. Please update your profile in Settings."})
 		return
 	}
 
@@ -78,59 +79,94 @@ func GetDevHealth(c *gin.Context) {
 
 // POST /api/wings/dev/review
 func ReviewPullRequest(c *gin.Context) {
-	userID := c.MustGet("user_id").(uint)
-
 	var input struct {
-		PRURL string `json:"pr_url" binding:"required"` // e.g., https://github.com/owner/repo/pull/1
+		PRURL string `json:"pr_url" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "PR URL is required"})
 		return
 	}
 
-	// 1. Fetch PR Diff from GitHub
-	// Standard PR URL: https://github.com/owner/repo/pull/1
-	// API PR URL: https://api.github.com/repos/owner/repo/pulls/1
-	apiURL := strings.Replace(input.PRURL, "github.com", "api.github.com/repos", 1)
-	apiURL = strings.Replace(apiURL, "/pull/", "/pulls/", 1)
-
-	req, _ := http.NewRequest("GET", apiURL, nil)
-	req.Header.Set("Accept", "application/vnd.github.v3.diff")
-	
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// 1. Fetch PR Diff from GitHub via specialized service
+	diffContent, err := services.FetchPRDiff(input.PRURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch PR diff: " + err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("GitHub API returned %d", resp.StatusCode)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	diffBytes, err := io.ReadAll(resp.Body)
+	// Truncate if diff is massive to save tokens
+	if len(diffContent) > 8000 {
+		diffContent = diffContent[:8000] + "\n... (Diff truncated for review) ..."
+	}
+
+	// 2. Persona-Locked AI Review
+	systemPrompt := "You are The Architect, a Senior Backend Engineer and System Design expert. You STRICTLY ONLY answer questions regarding software development, system architecture, Go, React, databases, CI/CD, and GitHub workflows."
+	aiPrompt := fmt.Sprintf("You are The Architect. Review this GitHub PR diff. Focus on security vulnerabilities, Go/React anti-patterns, and performance bottlenecks. Be concise and format with Markdown.\n\nDiff:\n```diff\n%s\n```", diffContent)
+
+	response, persona, err := services.MultiCall("dev", aiPrompt, systemPrompt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read diff"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Architect failed: " + err.Error()})
 		return
 	}
-	diffContent := string(diffBytes)
-	if len(diffContent) > 10000 {
-		diffContent = diffContent[:10000] + "\n... (diff truncated)"
+
+	// Task 1: Sanitize Response (Remove <think> blocks)
+	re := regexp.MustCompile(`(?s)<think>.*?</think>\n*`)
+	response = re.ReplaceAllString(response, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"review":  response,
+		"persona": persona,
+	})
+}
+
+// POST /api/wings/dev/resume
+func GenerateResumeBullets(c *gin.Context) {
+	var input struct {
+		RepoURL string `json:"repo_url" binding:"required"` // e.g., https://github.com/user/repo
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Repo URL is required"})
+		return
 	}
 
-	// 2. Fetch Shadow Memory Context
-	weaknesses, _ := services.GetWeakConcepts(userID, "Web") // Defaulting to Web for Dev wing
-	memoryContext := services.FormatContextString(weaknesses)
+	// 1. Parse Owner and Repo from URL
+	// Pattern: https://github.com/owner/repo
+	trimmedURL := strings.TrimSuffix(input.RepoURL, "/")
+	parts := strings.Split(trimmedURL, "/")
+	if len(parts) < 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid GitHub repository URL"})
+		return
+	}
+	owner := parts[3]
+	repo := parts[4]
 
-	// 3. Orchestrator Handoff
-	aiPrompt := fmt.Sprintf("Review this GitHub PR diff for security, anti-patterns, and performance:\n\n%s", diffContent)
-	plan, err := services.DecomposeTask(aiPrompt, memoryContext)
+	// 2. Fetch Recent Commits
+	commits, err := services.FetchRecentCommits(owner, repo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Orchestrator error: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch commits: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, plan)
+	commitSummary := strings.Join(commits, "\n- ")
+	if len(commitSummary) > 5000 {
+		commitSummary = commitSummary[:5000]
+	}
+
+	// 3. AI Handoff
+	systemPrompt := "You are an Expert Tech Recruiter specializing in Software Engineering internships and entry-level roles."
+	aiPrompt := fmt.Sprintf("Turn these raw git commit messages into 3 powerful, professional resume bullet points using the STAR (Situation, Task, Action, Result) method. Focus on impact, technical keywords, and quantitative metrics where possible. \n\nCommits:\n- %s", commitSummary)
+
+	response, _, err := services.MultiCall("dev", aiPrompt, systemPrompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Recruiter AI failed: " + err.Error()})
+		return
+	}
+
+	// Task 1: Sanitize Response (Remove <think> blocks)
+	re := regexp.MustCompile(`(?s)<think>.*?</think>\n*`)
+	response = re.ReplaceAllString(response, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"bullets": response,
+	})
 }

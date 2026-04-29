@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import axios from 'axios';
@@ -48,7 +49,12 @@ const Dashboard = () => {
                     <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400">
                         Hello, {user.name}
                     </h1>
-                    <p className="text-gray-400 text-sm mt-1">{user.email}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                        <p className="text-gray-400 text-sm">{user.email}</p>
+                        <Badge className="bg-purple-600/20 text-purple-400 border-purple-600/30 font-bold">
+                            AXIOS RATING: {user.axios_rating || 0}
+                        </Badge>
+                    </div>
                 </div>
                 <div className="flex items-center gap-4">
                     {status.msg && (

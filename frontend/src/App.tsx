@@ -8,6 +8,7 @@ import Resources from "./pages/Resources"
 import AILab from "./pages/AILab"
 import Navbar from "./components/Navbar"
 import Wrapped from "./pages/Wrapped"
+import WingPage from "./pages/WingPage"
 
 import { AuthProvider } from "./context/AuthContext"
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="/resources" element={<Resources />} />
             <Route path="/ai-lab" element={<AILab />} />
             <Route path="/wrapped" element={<Wrapped />} />
+            <Route path="/wings/:wing_id" element={<WingPage />} />
           </Routes>
         </div>
       </Router>

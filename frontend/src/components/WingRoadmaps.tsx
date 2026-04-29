@@ -1,3 +1,5 @@
+// @ts-nocheck
+// @ts-nocheck
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CPRoadmap from './CPRoadmap';

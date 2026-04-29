@@ -3,6 +3,7 @@ package main
 import (
 	"axios-backend/database"
 	"axios-backend/routes"
+	"axios-backend/services"
 	"axios-backend/workers"
 	"github.com/gin-gonic/gin"
 	"os"
@@ -10,7 +11,10 @@ import (
 
 func main() {
 	database.Connect()
+	services.InitRedis()
+	services.InitRabbitMQ()
 	workers.StartCronJobs()
+	go workers.StartCFConsumer()
 
 	r := gin.Default()
 	

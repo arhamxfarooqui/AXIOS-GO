@@ -11,11 +11,20 @@ interface Message {
     content: string;
 }
 
-const AICoach = () => {
-    // Uses the same token as the Roadmap
-    const [apiKey, setApiKey] = useState(localStorage.getItem('hf_token') || '');
+interface AICoachProps {
+    wing?: string;
+}
+
+const AICoach = ({ wing = "general" }: AICoachProps) => {
     const [messages, setMessages] = useState<Message[]>([
-        { role: 'assistant', content: "Hello! I'm your AI Coach (Llama 3). Ask me about algorithms, problems, or your stats!" }
+        { 
+            role: 'assistant', 
+            content: wing === 'dev' 
+                ? "Hello! I'm your Architect. Ask me about system design, code reviews, or backend architecture!" 
+                : wing === 'cp' 
+                    ? "Hello! I'm your CodeSensei. Ask me about algorithms or competitive programming strategy!"
+                    : "Hello! I'm your AI Coach. How can I help you today?"
+        }
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
@@ -29,13 +38,15 @@ const AICoach = () => {
         scrollToBottom();
     }, [messages]);
 
+    const personaMapping: any = {
+        'cp': 'Logic Engine (CodeSensei)',
+        'dev': 'Architect (Dev Wing)',
+        'ml': 'Concept Lab (Scout)',
+        'general': 'Axios Core'
+    };
+
     const handleSend = async () => {
         if (!input.trim()) return;
-
-        // Auto-save the token for future use if provided
-        if (apiKey) {
-            localStorage.setItem('hf_token', apiKey);
-        }
 
         const userMsg = input;
         setInput('');
@@ -44,9 +55,9 @@ const AICoach = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('http://localhost:8081/api/ai/chat', {
+            const response = await axios.post('http://localhost:8081/api/ai/codesensei', {
                 message: userMsg,
-                api_key: apiKey
+                wing: wing
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -54,7 +65,7 @@ const AICoach = () => {
             setMessages(prev => [...prev, { role: 'assistant', content: response.data.response }]);
         } catch (error: any) {
             console.error("Chat Error", error);
-            const errMsg = error.response?.data?.error || "Error connecting to Coach. Check your token.";
+            const errMsg = error.response?.data?.error || "Error connecting to Coach.";
             setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${errMsg}` }]);
         } finally {
             setLoading(false);
@@ -69,10 +80,10 @@ const AICoach = () => {
                         <Bot className="w-6 h-6 text-purple-400" />
                     </div>
                     <div>
-                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-white to-cyan-300 font-bold">
-                            AI CP Coach
+                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-300 via-white to-cyan-300 font-bold uppercase tracking-tight">
+                            {personaMapping[wing] || personaMapping['general']}
                         </span>
-                        <span className="block text-xs font-normal text-gray-400 mt-0.5">Powered by Llama 3 (8B Instruct)</span>
+                        <span className="block text-[10px] font-normal text-gray-500 mt-0.5 uppercase">Neural Core Online</span>
                     </div>
                 </CardTitle>
             </CardHeader>
@@ -117,7 +128,7 @@ const AICoach = () => {
                     <div className="flex justify-start animate-in fade-in duration-300">
                         <div className="bg-white/5 border border-white/10 p-3 rounded-2xl rounded-bl-none flex items-center gap-3">
                             <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                            <span className="text-xs text-gray-400 font-medium">Llama is thinking...</span>
+                            <span className="text-xs text-gray-400 font-medium italic">Generating nudge...</span>
                         </div>
                     </div>
                 )}
@@ -125,36 +136,21 @@ const AICoach = () => {
             </CardContent>
 
             <div className="p-4 border-t border-white/10 bg-black/20">
-                <div className="flex flex-col gap-3">
-                    <div className="relative">
-                        <Input
-                            type="password"
-                            placeholder="Hugging Face Token (Auto-saved from Roadmap)"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            className="bg-black/50 border-white/10 text-white text-xs h-8 focus:ring-purple-500/50 placeholder:text-gray-600"
-                        />
-                    </div>
-
-                    <div className="flex gap-2">
-                        <Input
-                            placeholder="Ask about graph problems, DP strategy, or your stats..."
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            className="bg-white/5 border-white/10 text-white focus:ring-purple-500/50 backdrop-blur-sm"
-                        />
-                        <Button
-                            onClick={handleSend}
-                            disabled={loading || !input.trim()}
-                            className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
-                        >
-                            <Send className="w-4 h-4" />
-                        </Button>
-                    </div>
-                    <p className="text-[10px] text-center text-gray-600">
-                        Response times may vary based on Hugging Face API load.
-                    </p>
+                <div className="flex gap-2">
+                    <Input
+                        placeholder={wing === 'dev' ? "Ask about Go concurrency, React state, or paste a code snippet..." : "Ask about graph problems, DP strategy, or your stats..."}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        className="bg-white/5 border-white/10 text-white focus:ring-purple-500/50 backdrop-blur-sm"
+                    />
+                    <Button
+                        onClick={handleSend}
+                        disabled={loading || !input.trim()}
+                        className="bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-500/20"
+                    >
+                        <Send className="w-4 h-4" />
+                    </Button>
                 </div>
             </div>
         </Card>

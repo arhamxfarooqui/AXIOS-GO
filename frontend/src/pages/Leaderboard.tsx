@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import axios from 'axios';
 
-const WINGS = ["Overall", "CP", "ML", "Web", "App", "FOSS", "InfoSec"];
+const WINGS = ["Overall", "CP", "Dev", "ML", "Sec"];
 
 const Leaderboard = () => {
     const [users, setUsers] = useState<any[]>([]);
@@ -15,7 +15,7 @@ const Leaderboard = () => {
             try {
                 let url = 'http://localhost:8081/api/public/leaderboard';
                 if (currentWing !== "Overall") {
-                    url += `/${currentWing}`; // e.g., /leaderboard/CP
+                    url += `/wing?wing=${currentWing.toLowerCase()}`;
                 }
                 const response = await axios.get(url);
                 setUsers(response.data);
@@ -55,23 +55,40 @@ const Leaderboard = () => {
                                     <Table>
                                         <TableHeader className="hover:bg-transparent">
                                             <TableRow className="hover:bg-transparent border-white/10">
-                                                <TableHead className="text-gray-400 w-[100px]">Rank</TableHead>
+                                                <TableHead className="text-gray-400 w-[80px]">Rank</TableHead>
                                                 <TableHead className="text-gray-400">Name</TableHead>
-                                                <TableHead className="text-gray-400 text-right">Solved / Score</TableHead>
+                                                <TableHead className="text-gray-400 text-center">
+                                                    {currentWing === "CP" ? "CF Rating" : currentWing === "Dev" ? "Repos" : "Solved"}
+                                                </TableHead>
+                                                <TableHead className="text-gray-400 text-right">Axios Rating</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {users.length > 0 ? (
                                                 users.map((user, index) => (
-                                                    <TableRow key={user.ID} className="border-white/10 hover:bg-white/5">
-                                                        <TableCell className="font-medium">{index + 1}</TableCell>
-                                                        <TableCell>{user.name}</TableCell>
-                                                        <TableCell className="text-right">{user.total_solved}</TableCell>
+                                                    <TableRow key={user.ID} className="border-white/10 hover:bg-white/5 transition-colors">
+                                                        <TableCell className="font-medium">
+                                                            {index < 3 ? (
+                                                                <span className="flex items-center gap-2">
+                                                                    {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
+                                                                    {index + 1}
+                                                                </span>
+                                                            ) : index + 1}
+                                                        </TableCell>
+                                                        <TableCell className="font-semibold text-purple-200">{user.name}</TableCell>
+                                                        <TableCell className="text-center text-gray-300">
+                                                            {currentWing === "CP" ? user.codeforces_rating : 
+                                                             currentWing === "Dev" ? user.github_repos : 
+                                                             user.total_solved}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-cyan-400">
+                                                            {user.axios_rating}
+                                                        </TableCell>
                                                     </TableRow>
                                                 ))
                                             ) : (
                                                 <TableRow className="hover:bg-transparent">
-                                                    <TableCell colSpan={3} className="text-center h-24 text-gray-500">
+                                                    <TableCell colSpan={4} className="text-center h-24 text-gray-500">
                                                         No data available yet.
                                                     </TableCell>
                                                 </TableRow>

@@ -13,6 +13,7 @@ func GetResources(c *gin.Context) {
 	var resources []models.Resource
 	subject := c.Query("subject")
 	year := c.Query("year")
+	wing := c.Query("wing")
 	
 	query := database.DB
 	if subject != "" {
@@ -20,6 +21,9 @@ func GetResources(c *gin.Context) {
 	}
 	if year != "" {
 		query = query.Where("year = ?", year)
+	}
+	if wing != "" {
+		query = query.Where("wing_id = ?", wing)
 	}
 	
 	if err := query.Find(&resources).Error; err != nil {

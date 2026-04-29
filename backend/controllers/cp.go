@@ -2,12 +2,14 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"time"
 
 	"axios-backend/database"
 	"axios-backend/models"
+	"axios-backend/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,6 +25,29 @@ func GetUpsolveQueue(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, tasks)
+}
+
+// POST /api/wings/cp/sync
+func SyncUpsolves(c *gin.Context) {
+	userID := c.MustGet("user_id").(uint)
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if user.CodeforcesHandle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Codeforces handle not linked"})
+		return
+	}
+
+	// Publish async task to RabbitMQ
+	if err := services.PublishCFSync(userID, user.CodeforcesHandle); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to queue sync task"})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{"message": "Sync queued. Problems will appear shortly."})
 }
 
 // POST /api/wings/cp/upsolves/:id/status
@@ -70,6 +95,13 @@ type CFProblemSet struct {
 
 // POST /api/wings/cp/mock
 func GenerateMockContest(c *gin.Context) {
+	userID := c.MustGet("user_id").(uint)
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
 	var input struct {
 		Rating int `json:"rating" binding:"required"`
 	}
@@ -78,7 +110,25 @@ func GenerateMockContest(c *gin.Context) {
 		return
 	}
 
-	// Fetch global problemset
+	// 1. Fetch User Solved Problems
+	solvedProblems := make(map[string]bool)
+	if user.CodeforcesHandle != "" {
+		resp, err := http.Get(fmt.Sprintf("https://codeforces.com/api/user.status?handle=%s", user.CodeforcesHandle))
+		if err == nil {
+			var statusResp services.CFStatusResponse
+			if err := json.NewDecoder(resp.Body).Decode(&statusResp); err == nil {
+				for _, sub := range statusResp.Result {
+					if sub.Verdict == "OK" {
+						id := fmt.Sprintf("%d%s", sub.Problem.ContestId, sub.Problem.Index)
+						solvedProblems[id] = true
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+	}
+
+	// 2. Fetch global problemset
 	resp, err := http.Get("https://codeforces.com/api/problemset.problems")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch Codeforces problemset"})
@@ -92,20 +142,22 @@ func GenerateMockContest(c *gin.Context) {
 		return
 	}
 
-	// Filter problems within rating ± 200
+	// 3. Filter problems (ContestID >= 2050, Unsolved, Rating range)
 	var pool []interface{}
 	for _, p := range ps.Result.Problems {
-		if p.Rating >= input.Rating-200 && p.Rating <= input.Rating+200 {
+		problemID := fmt.Sprintf("%d%s", p.ContestId, p.Index)
+		
+		if p.ContestId >= 2050 && !solvedProblems[problemID] && p.Rating >= input.Rating-200 && p.Rating <= input.Rating+200 {
 			pool = append(pool, p)
 		}
 	}
 
 	if len(pool) < 4 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Not enough problems found for this rating range"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not enough fresh unsolved problems found for this rating range (>= 2025 contests only)"})
 		return
 	}
 
-	// Randomly select 4
+	// 4. Randomly select 4
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
 

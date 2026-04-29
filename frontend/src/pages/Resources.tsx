@@ -1,123 +1,130 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { WING_DATA } from '@/components/StaticRoadmap';
-import { BookOpen, CheckCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ThumbsUp, BookOpen, ExternalLink, Filter } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface Resource {
+    ID: number;
+    title: string;
+    link: string;
+    subject: string;
+    difficulty_level: string;
+    upvotes: number;
+    wing_id: string;
+}
+
+const WINGS = [
+    { id: 'all', name: 'All Resources' },
+    { id: 'cp', name: 'Competitive Programming' },
+    { id: 'dev', name: 'Web Development' },
+    { id: 'ml', name: 'Machine Learning' },
+    { id: 'sec', name: 'InfoSec' }
+];
 
 const Resources = () => {
-    // State to track which wing card is expanded
-    const [expandedWing, setExpandedWing] = useState<string | null>(null);
-    const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
+    const [resources, setResources] = useState<Resource[]>([]);
+    const [filter, setFilter] = useState('all');
+    const [loading, setLoading] = useState(true);
 
-    const toggleWing = (wingName: string) => {
-        if (expandedWing === wingName) {
-            setExpandedWing(null);
-        } else {
-            setExpandedWing(wingName);
-            setExpandedTopic(null); // Reset topic expansion when switching wings
-        }
-    };
-
-    const toggleTopic = (e: React.MouseEvent, topicName: string) => {
-        e.stopPropagation(); // Prevent closing the wing card
-        setExpandedTopic(expandedTopic === topicName ? null : topicName);
-    };
+    useEffect(() => {
+        const fetchResources = async () => {
+            setLoading(true);
+            try {
+                let url = 'http://localhost:8081/api/public/resources';
+                if (filter !== 'all') {
+                    // Match mapping used in leaderboard or exact wing_id
+                    const wingMapping: any = {
+                        'cp': 'Competitive Programming',
+                        'dev': 'Web Development',
+                        'ml': 'Machine Learning',
+                        'sec': 'InfoSec'
+                    };
+                    url += `?wing=${wingMapping[filter] || filter}`;
+                }
+                const response = await axios.get(url);
+                setResources(response.data);
+            } catch (err) {
+                console.error("Failed to fetch resources", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchResources();
+    }, [filter]);
 
     return (
-        <div className="container mx-auto p-4 md:p-6 min-h-screen pb-20">
-            <div className="text-center mb-10 space-y-2">
-                <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 animate-in fade-in slide-in-from-top-4">
-                    Resource Library
-                </h1>
-                <p className="text-gray-400 animate-in fade-in slide-in-from-top-4 delay-100">
-                    Comprehensive roadmaps and curated resources for every technical wing.
-                </p>
+        <div className="container mx-auto p-6 min-h-screen pt-24">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
+                <div>
+                    <h1 className="text-4xl font-bold text-white mb-2">Resource Library</h1>
+                    <p className="text-gray-400 text-sm">Curated roadmaps and materials across all domains.</p>
+                </div>
+
+                <div className="flex items-center gap-3 bg-white/5 p-2 rounded-xl border border-white/10">
+                    <Filter className="w-4 h-4 text-purple-400 ml-2" />
+                    <Select onValueChange={setFilter} defaultValue="all">
+                        <SelectTrigger className="w-[180px] bg-transparent border-none text-white focus:ring-0">
+                            <SelectValue placeholder="Filter by Wing" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0c0c1d] border-white/10 text-white">
+                            {WINGS.map(w => (
+                                <SelectItem key={w.id} value={w.id} className="focus:bg-purple-600 focus:text-white">
+                                    {w.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 max-w-4xl mx-auto">
-                {Object.entries(WING_DATA).map(([wingName, data], index) => {
-                    const isExpanded = expandedWing === wingName;
-
-                    return (
-                        <Card
-                            key={wingName}
-                            className={`bg-white/5 border-white/10 overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-1 ring-purple-500/50 bg-white/10' : 'hover:bg-white/10'}`}
-                        >
-                            <div
-                                onClick={() => toggleWing(wingName)}
-                                className="cursor-pointer p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-xl bg-white/5 border border-white/10 ${data.color}`}>
-                                        {data.icon}
+            {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div key={i} className="h-48 bg-white/5 animate-pulse rounded-xl" />
+                    ))}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {resources.length > 0 ? (
+                        resources.map(res => (
+                            <Card key={res.ID} className="bg-white/5 border-white/10 hover:border-purple-500/50 transition-all group overflow-hidden">
+                                <CardHeader className="pb-3">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <Badge className="bg-purple-600/20 text-purple-400 border-purple-600/30">
+                                            {res.subject}
+                                        </Badge>
+                                        <span className="text-[10px] uppercase text-gray-500 font-mono">{res.difficulty_level}</span>
                                     </div>
-                                    <div>
-                                        <h3 className="text-xl font-bold text-white mb-1">{wingName}</h3>
-                                        <p className="text-sm text-gray-400">{data.description}</p>
+                                    <CardTitle className="text-lg text-white group-hover:text-purple-400 transition-colors leading-tight">
+                                        {res.title}
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center justify-between mt-4">
+                                        <a href={res.link} target="_blank" rel="noopener noreferrer" 
+                                           className="flex items-center gap-2 text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                                            <ExternalLink className="w-3 h-3" />
+                                            View Content
+                                        </a>
+                                        <Button variant="ghost" size="sm" className="h-8 gap-2 text-gray-400 hover:text-white hover:bg-white/5">
+                                            <ThumbsUp className="w-3 h-3" />
+                                            {res.upvotes || 0}
+                                        </Button>
                                     </div>
-                                </div>
-                                <div className="text-gray-500">
-                                    {isExpanded ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
-                                </div>
-                            </div>
-
-                            {/* Detailed Roadmap Content */}
-                            {isExpanded && (
-                                <div className="border-t border-white/10 bg-black/20 p-6 animate-in slide-in-from-top-2 fade-in">
-                                    <h4 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                                        <BookOpen className="w-4 h-4 text-purple-400" />
-                                        Complete Learning Path
-                                    </h4>
-
-                                    <div className="grid gap-3">
-                                        {data.topics.map((topic, i) => {
-                                            const isTopicExpanded = expandedTopic === `${wingName}-${topic.name}`;
-
-                                            return (
-                                                <div key={i} className="rounded-lg bg-white/5 border border-white/5 overflow-hidden">
-                                                    <button
-                                                        onClick={(e) => toggleTopic(e, `${wingName}-${topic.name}`)}
-                                                        className="w-full flex items-center justify-between p-3 text-sm text-gray-200 hover:bg-white/10 transition-colors text-left"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <CheckCircle className={`w-4 h-4 ${isTopicExpanded ? data.color : 'text-gray-500/50'}`} />
-                                                            <span className="font-medium">{topic.name}</span>
-                                                        </div>
-                                                        {isTopicExpanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                                                    </button>
-
-                                                    {isTopicExpanded && (
-                                                        <div className="bg-black/40 p-3 border-t border-white/5 space-y-2 animate-in slide-in-from-top-1">
-                                                            {topic.resources.map((res, j) => (
-                                                                <a
-                                                                    key={j}
-                                                                    href={res.url}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="flex items-center justify-between group p-2 rounded hover:bg-white/10 transition-colors ml-7 border-l-2 border-white/5 pl-3"
-                                                                >
-                                                                    <span className="text-xs text-cyan-300 group-hover:text-cyan-200 transition-colors">
-                                                                        {res.title}
-                                                                    </span>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-[10px] uppercase text-gray-500 border border-white/10 px-1.5 rounded bg-black/50">
-                                                                            {res.type}
-                                                                        </span>
-                                                                        <ExternalLink className="w-3 h-3 text-gray-600 group-hover:text-white transition-all" />
-                                                                    </div>
-                                                                </a>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </Card>
-                    );
-                })}
-            </div>
+                                </CardContent>
+                            </Card>
+                        ))
+                    ) : (
+                        <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-2xl">
+                            <BookOpen className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                            <p className="text-gray-500">No resources found for this wing yet.</p>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

@@ -5,14 +5,14 @@ import { Points, PointMaterial } from '@react-three/drei';
 import * as random from 'maath/random/dist/maath-random.esm';
 
 const Stars = (props: any) => {
-    const ref = useRef<any>();
+    const ref = useRef<any>(null);
     const [sphere] = useState(() => {
         const data = new Float32Array(5000);
         random.inSphere(data, { radius: 1.5 });
         return data;
     });
 
-    useFrame((state, delta) => {
+    useFrame((_, delta) => {
         if (ref.current) {
             ref.current.rotation.x -= delta / 10;
             ref.current.rotation.y -= delta / 15;

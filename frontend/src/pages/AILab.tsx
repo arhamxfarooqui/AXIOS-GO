@@ -11,7 +11,7 @@ const AILab = () => {
                     AI Research Lab
                 </h1>
                 <p className="text-gray-400 text-sm">
-                    Connect an API Key to experiment with Gemini models.
+                    Experiment with advanced DeepSeek and Groq models.
                 </p>
             </div>
 

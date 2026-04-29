@@ -27,10 +27,10 @@ func SetupRoutes(r *gin.Engine) {
 		ai := api.Group("/ai")
 		ai.Use(middleware.AuthMiddleware())
 		{
-            ai.POST("/connect", controllers.ConnectToCoach)
-			ai.POST("/chat", controllers.ChatWithCoach)
-            ai.POST("/roadmap", controllers.GenerateRoadmap)
-            ai.GET("/analysis", controllers.GetProfileAnalysis)
+			ai.POST("/codesensei", controllers.CodeSensei)
+			ai.POST("/roadmap", controllers.GenerateRoadmap)
+			ai.GET("/analysis", controllers.GetProfileAnalysis)
+			ai.POST("/analyze", controllers.AnalyzeWithOrchestrator)
 		}
 
 		// Wing-Specific Routes
@@ -41,11 +41,13 @@ func SetupRoutes(r *gin.Engine) {
 			wings.GET("/cp/upsolves", controllers.GetUpsolveQueue)
 			wings.POST("/cp/upsolves/:id/status", controllers.UpdateUpsolveStatus)
 			wings.POST("/cp/mock", controllers.GenerateMockContest)
+			wings.POST("/cp/sync", controllers.SyncUpsolves)
 
 			// Dev Wing
 			wings.GET("/dev/first-issues", controllers.GetGoodFirstIssues)
 			wings.GET("/dev/health", controllers.GetDevHealth)
 			wings.POST("/dev/review", controllers.ReviewPullRequest)
+			wings.POST("/dev/resume", controllers.GenerateResumeBullets)
 
 			// ML Wing
 			wings.GET("/ml/curate", controllers.GetMLCuration)
@@ -54,7 +56,7 @@ func SetupRoutes(r *gin.Engine) {
 		public := api.Group("/public")
 		{
 			public.GET("/leaderboard", controllers.GetOverallLeaderboard)
-			public.GET("/leaderboard/:wing", controllers.GetWingLeaderboard)
+			public.GET("/leaderboard/wing", controllers.GetWingLeaderboard)
 			
 			// Resources
 			public.GET("/resources", controllers.GetResources)

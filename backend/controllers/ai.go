@@ -3,9 +3,9 @@ package controllers
 import (
 	"fmt"
 	"net/http"
-    "strings"
+	"regexp"
+	"strings"
 
-	"os"
 	"axios-backend/database"
 	"axios-backend/models"
 	"axios-backend/services"
@@ -13,260 +13,225 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// getAIKey returns the provided key, the environment variable HF_TOKEN, or a hardcoded fallback.
-func getAIKey(providedKey string) string {
-    if providedKey != "" {
-        return providedKey
-    }
-    envKey := os.Getenv("HF_TOKEN")
-    if envKey != "" {
-        return envKey
-    }
-    return "" // Removed hardcoded key to pass GitHub secret scanning
-}
-
-type ConnectInput struct {
-    ApiKey string `json:"api_key"`
-}
-
-type ChatInput struct {
-	Message string `json:"message" binding:"required"`
-    ApiKey  string `json:"api_key"`
-    Model   string `json:"model"` // Optional
-}
-
-func ConnectToCoach(c *gin.Context) {
-    var input ConnectInput
-    if err := c.ShouldBindJSON(&input); err != nil && err.Error() != "EOF" {
-        // Just proceed, API Key is optional
-    }
-
-    apiKey := getAIKey(input.ApiKey)
-    err := services.ValidateTokenHF(apiKey)
-    if err != nil {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API Key or no supported models found: " + err.Error()})
-        return
-    }
-
-    defaultModel := "meta-llama/Meta-Llama-3.1-8B-Instruct"
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Connected successfully", 
-        "models": []string{defaultModel},
-        "default_model": defaultModel,
-    })
-}
-
-func ChatWithCoach(c *gin.Context) {
-    // fmt.Println("--- ENTERED ChatWithCoach ---")
-	var input ChatInput
+// POST /api/ai/codesensei
+func CodeSensei(c *gin.Context) {
+	var input struct {
+		Message string `json:"message" binding:"required"`
+		Wing    string `json:"wing"` // Optional, defaults to general
+	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Message and API Key are required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Message is required"})
 		return
 	}
 
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
-        // fmt.Println("Auth failed: user_id not in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-    
-    // safe cast to uint
-    var userID uint
-    switch v := userIDVal.(type) {
-    case uint:
-        userID = v
-    case float64:
-        userID = uint(v)
-    default:
-        // fmt.Printf("UserID type mismatch: %T\n", userIDVal)
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal UserID Error"})
-        return
-    }
 
-    // fmt.Printf("AI Chat Request from UserID: %d\n", userID)
+	var userID uint
+	switch v := userIDVal.(type) {
+	case uint:
+		userID = v
+	case float64:
+		userID = uint(v)
+	}
 
 	var user models.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
-        // fmt.Println("User lookup failed:", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
-	// Construct User Context
-	// Fetch Detailed Stats
-    detailedStats, _ := services.FetchCodeforcesDetails(user.CodeforcesHandle)
-    
-    // Format Top Tags (Top 5)
-    var tags []string
-    for t, c := range detailedStats.TopTags {
-        tags = append(tags, fmt.Sprintf("%s (%d)", t, c))
-    }
-    // Simple sort or just take first few (map order random) - for now just join all or first 10
-    if len(tags) > 10 { tags = tags[:10] }
-    topTagsStr := strings.Join(tags, ", ")
+	// Context Construction
+	context := fmt.Sprintf("User: %s. CF Rating: %d. Solved: %d. Wings: %v.", user.Name, user.CodeforcesRating, user.TotalSolved, user.Wings)
+	
+	systemPrompt := "You are CodeSensei. Your goal is to guide the student technically. Identify logical errors but NEVER provide the full solution code. Use 'nudge' hints only. Use Markdown."
+	
+	if strings.ToLower(input.Wing) == "cp" {
+		systemPrompt = "You are CodeSensei, an elite Competitive Programming Grandmaster. You STRICTLY ONLY answer questions regarding data structures, algorithms, math, and competitive programming logic. If the user asks about FOSS, web development, general knowledge, or anything outside of CP, you MUST decline and aggressively steer the conversation back to competitive programming. Do not write full solutions, only give nudges."
+	} else if strings.ToLower(input.Wing) == "dev" {
+		systemPrompt = "You are The Architect, a Senior Backend Engineer and System Design expert. You STRICTLY ONLY answer questions regarding software development, system architecture, Go, React, databases, CI/CD, and GitHub workflows. If the user asks about competitive programming, algorithms like DP, or non-dev topics, politely refuse and steer them back to software engineering."
+	}
 
-	// Construct User Context
-    wings := strings.Join(user.Wings, ", ")
-	context := fmt.Sprintf(`
-You are "CodeSensei", an expert coding coach for the Axios technical wing.
-You are talking to %s.
-
-Here is their DETAILED Codeforces Profile:
-- Handle: %s (Rating: %d, Max Rank: %s)
-- Total Solved: %d
-- Max Problem Rating Solved: %d
-- Difficulty Breakdown:
-  - Easy (<1200): %d
-  - Medium (1200-1600): %d
-  - Hard (>1600): %d
-- Top Topics Solved: %s
-
-Other Stats:
-- GitHub: %s (Repos: %d)
-- Interested Wings: %s
-- Kaggle: %s
-- CTF: %s
-
-Your goal is to provide specific, actionable advice.
-- If they ask for problems, look at their difficulty breakdown and recommend problems +100-200 rating above their max or current rating.
-- If they are weak in a topic (low solve count), suggest resources for that topic.
-- Use the detailed context to give personalized advice.
-- Keep responses concise, encouraging, and technical. Use Markdown.
-`, user.Name, user.CodeforcesHandle, user.CodeforcesRating, "Unranked", detailedStats.TotalSolved, 
-   detailedStats.MaxRating, detailedStats.EasyCount, detailedStats.MediumCount, detailedStats.HardCount, topTagsStr,
-   user.GithubHandle, user.GithubRepos, wings, user.KaggleHandle, user.CTFHandle)
-
-    apiKey := getAIKey(input.ApiKey)
-	response, err := services.ChatWithCoachHF(apiKey, context, input.Message)
+	response, persona, err := services.MultiCall(input.Wing, input.Message, systemPrompt+"\nContext: "+context)
 	if err != nil {
-		fmt.Println("Hugging Face Error:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to contact AI Coach: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI Service Failure: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"response": response})
+	// Task 1: Sanitize Response (Remove <think> blocks)
+	re := regexp.MustCompile(`(?s)<think>.*?</think>\n*`)
+	response = re.ReplaceAllString(response, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"response": response,
+		"persona":  persona,
+	})
 }
 
+// POST /api/ai/roadmap
 func GenerateRoadmap(c *gin.Context) {
-    var input ConnectInput // Re-use for just ApiKey
-    if err := c.ShouldBindJSON(&input); err != nil && err.Error() != "EOF" {
-        // Proceed, ApiKey is optional
-    }
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    userIDVal, exists := c.Get("user_id")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
+	var userID uint
+	switch v := userIDVal.(type) {
+	case uint:
+		userID = v
+	case float64:
+		userID = uint(v)
+	}
+
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Fetch detailed stats for roadmap
+	stats := services.RoadmapRequest{
+		CFRating:     user.CodeforcesRating,
+		TotalSolved:  user.TotalSolved,
+		Wings:        user.Wings,
+		TopLanguages: []string{"C++", "Python"},
+		TopRepo:      user.GithubHandle,
+		KaggleStatus: "Active",
+		CTFStatus:    "Active",
+	}
+
+	roadmap, err := services.GenerateRoadmap(stats)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Roadmap Generation Failed: " + err.Error()})
+		return
+	}
+
+	c.Header("Content-Type", "application/json")
+	c.String(http.StatusOK, roadmap)
+}
+
+// POST /api/ai/analyze
+func AnalyzeWithOrchestrator(c *gin.Context) {
+	var input struct {
+		Prompt string `json:"prompt" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Prompt is required"})
+		return
+	}
+
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var userID uint
+	switch v := userIDVal.(type) {
+	case uint:
+		userID = v
+	case float64:
+		userID = uint(v)
+	}
+
+	// 1. Fetch Shadow Memory Context
+	weaknesses, _ := services.GetWeakConcepts(userID, "Web") // Default domain
+	memoryContext := services.FormatContextString(weaknesses)
+
+	// 2. Task Decomposition (Gemini Orchestrator)
+	plan, err := services.DecomposeTask(input.Prompt, memoryContext)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Orchestrator failure: " + err.Error()})
+		return
+	}
+
+	// 3. Execution (Multi-Provider Sub-Agents)
+    type SubTaskResult struct {
+        Description string `json:"description"`
+        TargetWing  string `json:"target_wing"`
+        ActionType  string `json:"action_type"`
+        Status      string `json:"status"`
+        Result      string `json:"result"`
     }
     
-    // safe cast pattern
-    var userID uint
-    switch v := userIDVal.(type) {
-    case uint: userID = v
-    case float64: userID = uint(v)
-    }
-
-    // 1. Get User from DB
-    var user models.User
-    if err := database.DB.First(&user, userID).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-        return
-    }
-
-    // 2. Fetch Live Stats (Parallelize if slow, but linear is safer for now)
-    // Codeforces
-    if user.CodeforcesHandle != "" {
-        rating, err := services.FetchCodeforcesStats(user.CodeforcesHandle)
-        if err == nil { user.CodeforcesRating = rating }
-        solved, err := services.FetchCodeforcesSolved(user.CodeforcesHandle)
-        if err == nil { user.TotalSolved = solved }
-    }
+    var results []SubTaskResult
     
-    // GitHub (Get Languages and Top Repo)
-    var topLangs []string
-    var topRepo string
-    if user.GithubHandle != "" {
-        langs, repo, err := services.FetchGithubLanguages(user.GithubHandle)
-        if err == nil { 
-            topLangs = langs 
-            topRepo = repo
-        }
-    }
+	for _, task := range plan.SubTasks {
+		systemPrompt := fmt.Sprintf("You are a specialized %s sub-agent. Provide CONCEPTUAL NUDGES ONLY. No full solutions. Focus on %s.", task.TargetWing, task.ActionType)
+		
+		res, _, err := services.MultiCall(task.TargetWing, task.Description, systemPrompt)
+		
+		// Sanitize sub-task results too
+		re := regexp.MustCompile(`(?s)<think>.*?</think>\n*`)
+		res = re.ReplaceAllString(res, "")
+        
+        status := "completed"
+		if err != nil {
+			status = "failed"
+            res = err.Error()
+		}
 
-    // Kaggle
-    kaggleStatus := "Not Linked"
-    if user.KaggleHandle != "" {
-        status, err := services.FetchKaggleStats(user.KaggleHandle)
-        if err == nil { kaggleStatus = status }
-    }
-   
-    // CTF
-    ctfStatus := "Not Linked"
-    if user.CTFHandle != "" {
-        status, err := services.FetchCTFStats(user.CTFHandle)
-        if err == nil { ctfStatus = status }
-    }
+        results = append(results, SubTaskResult{
+            Description: task.Description,
+            TargetWing:  task.TargetWing,
+            ActionType:  task.ActionType,
+            Status:      status,
+            Result:      res,
+        })
+	}
 
-    // 3. Build Request
-    stats := services.RoadmapRequest{
-        CFRating:     user.CodeforcesRating,
-        Wings:        user.Wings,
-        TopLanguages: topLangs,
-        TopRepo:      topRepo,
-        TotalSolved:  user.TotalSolved,
-        KaggleStatus: kaggleStatus,
-        CTFStatus:    ctfStatus,
-    }
-
-    apiKey := getAIKey(input.ApiKey)
-    jsonRoadmap, err := services.GenerateRoadmapHF(apiKey, stats)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "AI Generation Verification Failed: " + err.Error()})
-        return
-    }
-
-    // 5. Return JSON
-    c.Header("Content-Type", "application/json")
-    c.String(http.StatusOK, jsonRoadmap) // Return raw JSON string from Gemini
+	c.JSON(http.StatusOK, gin.H{
+        "summary": plan.Summary,
+        "tasks":   results,
+    })
 }
 
 func GetProfileAnalysis(c *gin.Context) {
-    userIDVal, exists := c.Get("user_id")
-    if !exists {
-        c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-        return
-    }
-    
-    var userID uint
-    switch v := userIDVal.(type) {
-    case uint: userID = v
-    case float64: userID = uint(v)
-    }
+	userIDVal, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
 
-    var user models.User
-    if err := database.DB.First(&user, userID).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-        return
-    }
+	var userID uint
+	switch v := userIDVal.(type) {
+	case uint:
+		userID = v
+	case float64:
+		userID = uint(v)
+	}
 
-    detailedStats, _ := services.FetchCodeforcesDetails(user.CodeforcesHandle)
-    var tags []string
-    for t, count := range detailedStats.TopTags {
-        tags = append(tags, fmt.Sprintf("%s (%d)", t, count))
-    }
-    if len(tags) > 10 { tags = tags[:10] }
-    topTagsStr := strings.Join(tags, ", ")
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
 
-    contextPrompt := fmt.Sprintf(`You are CodeSensei, an expert coding coach. Analyze this user's profile and provide motivation. User: %s, Codeforces: %s (Rating: %d), Total Solved: %d (Easy: %d, Medium: %d, Hard: %d). Top Tags: %s. GitHub: %s, Kaggle: %s, CTF: %s. Keep the analysis encouraging, highlight strengths, and suggest one actionable area for improvement. Format nicely in Markdown.`, user.Name, user.CodeforcesHandle, user.CodeforcesRating, detailedStats.TotalSolved, detailedStats.EasyCount, detailedStats.MediumCount, detailedStats.HardCount, topTagsStr, user.GithubHandle, user.KaggleHandle, user.CTFHandle)
+	detailedStats, _ := services.FetchCodeforcesDetails(user.CodeforcesHandle)
+	var tags []string
+	for t, count := range detailedStats.TopTags {
+		tags = append(tags, fmt.Sprintf("%s (%d)", t, count))
+	}
+	if len(tags) > 10 {
+		tags = tags[:10]
+	}
+	topTagsStr := strings.Join(tags, ", ")
 
-    apiKey := getAIKey("")
-    response, err := services.ChatWithCoachHF(apiKey, contextPrompt, "Please analyze my profile and give me actionable advice and encouragement.")
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate analysis: " + err.Error()})
-        return
-    }
+	contextPrompt := fmt.Sprintf(`Analyze this user's profile and provide motivation. User: %s, Codeforces: %s (Rating: %d), Total Solved: %d. Top Tags: %s. Keep the analysis encouraging, highlight strengths, and suggest one actionable area for improvement. Format nicely in Markdown.`, user.Name, user.CodeforcesHandle, user.CodeforcesRating, detailedStats.TotalSolved, topTagsStr)
 
-    c.JSON(http.StatusOK, gin.H{"analysis": response})
+	response, _, err := services.MultiCall("general", contextPrompt, "You are CodeSensei. Analyze the profile.")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate analysis: " + err.Error()})
+		return
+	}
+
+	// Sanitize analysis
+	re := regexp.MustCompile(`(?s)<think>.*?</think>\n*`)
+	response = re.ReplaceAllString(response, "")
+
+	c.JSON(http.StatusOK, gin.H{"analysis": response})
 }
-

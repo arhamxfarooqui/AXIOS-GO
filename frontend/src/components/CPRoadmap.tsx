@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Circle, ArrowRight, BookOpen, Star, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { CheckCircle, ArrowRight, BookOpen, Star, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 interface CPRoadmapProps {
     rating: number;

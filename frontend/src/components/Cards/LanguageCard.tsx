@@ -24,7 +24,7 @@ const LanguageCard: React.FC<LanguageCardProps> = ({ languages }) => {
                 </motion.div>
 
                 <div className="w-full max-w-xs space-y-2 mt-8">
-                    {languages.slice(1).map((lang, index) => (
+                    {languages.slice(1).map((lang) => (
                         <div key={lang.name} className="flex justify-between text-gray-400 text-sm border-b border-white/10 pb-1">
                             <span>{lang.name}</span>
                             <span>{lang.count} sub</span>

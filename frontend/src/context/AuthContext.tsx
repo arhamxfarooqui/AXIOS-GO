@@ -11,6 +11,8 @@ interface User {
     total_solved: number;
     wings: string[];
     github_repos: number;
+    axios_rating: number;
+    is_admin: boolean;
     kaggle_handle?: string;
     ctf_handle?: string;
 }

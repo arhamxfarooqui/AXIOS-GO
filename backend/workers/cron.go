@@ -1,15 +1,13 @@
 package workers
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"axios-backend/database"
 	"axios-backend/models"
 	"axios-backend/services"
+	"axios-backend/utils"
 
 	"github.com/robfig/cron/v3"
 )
@@ -19,15 +17,62 @@ func StartCronJobs() {
 	c := cron.New()
 
 	// Task 1: Codeforces Upsolve Engine (Every 4 hours)
-	// Schedule: At minute 0 of every 4th hour
 	_, err := c.AddFunc("0 */4 * * *", syncCodeforcesUpsolves)
 	if err != nil {
 		log.Fatalf("Failed to schedule Codeforces Upsolve job: %v", err)
 	}
 
+	// Task 2: Global Rating Sync (Every day at midnight)
+	_, err = c.AddFunc("0 0 * * *", SyncGlobalRatings)
+	if err != nil {
+		log.Fatalf("Failed to schedule Global Rating sync: %v", err)
+	}
+
 	c.Start()
 	log.Println("Background cron workers started successfully")
 }
+
+// SyncGlobalRatings refreshes metrics for all users and updates their AxiosRating.
+func SyncGlobalRatings() {
+	log.Println("[CRON] Starting Global Rating synchronization...")
+
+	var users []models.User
+	if err := database.DB.Find(&users).Error; err != nil {
+		log.Printf("[CRON] Error fetching users for rating sync: %v", err)
+		return
+	}
+
+	for _, user := range users {
+		// 1. Fetch fresh stats
+		// Using existing UpdateUserStats from services/fetcher.go
+		if err := services.UpdateUserStats(&user); err != nil {
+			log.Printf("[CRON] Failed to fetch fresh stats for %s: %v", user.Email, err)
+			continue
+		}
+
+		// 2. Calculate Axios Rating
+		// githubPRs is simulated for now as it's not in the model yet
+		newRating := utils.CalculateAxiosRating(
+			user.CodeforcesRating,
+			user.TotalSolved,
+			user.GithubRepos,
+			0, // PRs placeholder
+		)
+
+		// 3. Update DB
+		database.DB.Model(&user).Updates(models.User{
+			CodeforcesRating: user.CodeforcesRating,
+			TotalSolved:      user.TotalSolved,
+			GithubRepos:      user.GithubRepos,
+			AxiosRating:      newRating,
+		})
+
+		time.Sleep(500 * time.Millisecond) // Be gentle
+	}
+
+	log.Println("[CRON] Global Rating synchronization completed.")
+}
+
 
 // syncCodeforcesUpsolves iterates through all users, fetches their recent 
 // submissions, and populates the UpsolveTask table with non-OK results.
@@ -41,64 +86,7 @@ func syncCodeforcesUpsolves() {
 	}
 
 	for _, user := range users {
-		log.Printf("[CRON] Syncing upsolves for user: %s (%s)", user.Name, user.CodeforcesHandle)
-		
-		// 1. Fetch recent 20 submissions
-		url := fmt.Sprintf("https://codeforces.com/api/user.status?handle=%s&from=1&count=20", user.CodeforcesHandle)
-		resp, err := http.Get(url)
-		if err != nil {
-			log.Printf("[CRON] Error fetching status for %s: %v", user.CodeforcesHandle, err)
-			continue
-		}
-
-		var cfResp services.CFStatusResponse
-		if err := json.NewDecoder(resp.Body).Decode(&cfResp); err != nil {
-			resp.Body.Close()
-			log.Printf("[CRON] Error decoding JSON for %s: %v", user.CodeforcesHandle, err)
-			continue
-		}
-		resp.Body.Close()
-
-		if cfResp.Status != "OK" {
-			log.Printf("[CRON] CF API returned error for %s: %s", user.CodeforcesHandle, cfResp.Comment)
-			continue
-		}
-
-		// 2. Identify non-OK verdicts
-		for _, sub := range cfResp.Result {
-			// Verdicts like WRONG_ANSWER, TIME_LIMIT_EXCEEDED, etc.
-			// OK means they already solved it.
-			if sub.Verdict == "OK" || sub.Verdict == "TESTING" {
-				continue
-			}
-
-			problemURL := fmt.Sprintf("https://codeforces.com/contest/%d/problem/%s", sub.Problem.ContestId, sub.Problem.Index)
-
-			// 3. Check if task already exists for this user
-			var existing models.UpsolveTask
-			err := database.DB.Where("user_id = ? AND problem_url = ?", user.ID, problemURL).First(&existing).Error
-			if err == nil {
-				// Already in queue
-				continue
-			}
-
-			// 4. Create new UpsolveTask
-			tagsJSON, _ := json.Marshal(sub.Problem.Tags)
-			newTask := models.UpsolveTask{
-				UserID:      user.ID,
-				ProblemURL:  problemURL,
-				ProblemName: sub.Problem.Name,
-				ContestID:   sub.Problem.ContestId,
-				Rating:      sub.Problem.Rating,
-				Tags:        string(tagsJSON),
-				Status:      "pending",
-			}
-
-			if err := database.DB.Create(&newTask).Error; err != nil {
-				log.Printf("[CRON] Error creating UpsolveTask for %s: %v", user.CodeforcesHandle, err)
-			}
-		}
-
+		services.SyncUserUpsolves(&user)
 		// Respect rate limits
 		time.Sleep(1 * time.Second)
 	}
