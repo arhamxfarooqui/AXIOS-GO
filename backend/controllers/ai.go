@@ -142,7 +142,7 @@ func AnalyzeWithOrchestrator(c *gin.Context) {
 	weaknesses, _ := services.GetWeakConcepts(userID, "Web") // Default domain
 	memoryContext := services.FormatContextString(weaknesses)
 
-	// 2. Task Decomposition (Gemini Orchestrator)
+	// 2. Task Decomposition (DeepSeek Orchestrator)
 	plan, err := services.DecomposeTask(input.Prompt, memoryContext)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Orchestrator failure: " + err.Error()})
